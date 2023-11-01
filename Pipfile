@@ -4,6 +4,18 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+pandas = "*"
+tqdm = "*"
+requests = "*"
+wordninja = "*"
+scikit-learn = "*"
+imblearn = "*"
+tensorflow = "*"
+seaborn = "*"
+matplotlib = "*"
+keras = "*"
+callbacks = "*"
+pdpbox = "*"
 
 [dev-packages]
 
