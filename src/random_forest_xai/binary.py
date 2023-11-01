@@ -22,19 +22,16 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 import tensorflow as tf
 
 tf.compat.v1.disable_v2_behavior()
-from tensorflow.python.keras import Sequential
-from tensorflow.python.keras.layers import Dense, Input, Dropout
-from keras import callbacks
+import subprocess
 from imblearn.over_sampling import SMOTE
 from sklearn.ensemble import RandomForestClassifier
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import figure
-import eli5
-from eli5.sklearn import PermutationImportance
+# import eli5
+# from eli5.sklearn import PermutationImportance
 from pdpbox import pdp, info_plots
 import shap
-import sys
 
 # Dataset to load
 filename = "../../files/labeled_dataset_features.csv"
@@ -123,13 +120,16 @@ def oversample_data(X_train, y_train):
     return X_train, y_train
 
 
-def train_and_test_model(X_train, y_train, X_test, y_test):
+def train_model(X_train, y_train):
     rng = np.random.RandomState(42)
 
     model = RandomForestClassifier(n_estimators=10, max_depth=50, n_jobs=-1, random_state=rng)
     model.fit(X_train, y_train.values.ravel())
+
+    return model
+
+def evaluate_model(model, X_test, y_test):
     predictions = model.predict(X_test)
-    accuracy = accuracy_score(y_test["Label"].values, predictions, normalize=True)
 
     # Print the different testing scores
     print("Algorithm: Random Forest")
@@ -138,8 +138,6 @@ def train_and_test_model(X_train, y_train, X_test, y_test):
     print("Recall None: ", recall_score(y_test["Label"].values, predictions, average=None))
     print("F1 score None: ", f1_score(y_test["Label"].values, predictions, average=None))
     print(separator)
-
-    # print("Accuracy score for 10 estimators and max depth 50: ", accuracy)
 
     return None
 
@@ -153,16 +151,6 @@ def evaluate_model_on_family(model, family, x_testing, algorithm):
         zero_values = predictions.size - non_zero_values
         accuracy = zero_values / predictions.size
     print("Accuracy on sampled testing dataset for family and algorithm: ", family, algorithm, accuracy)
-    return None
-
-def feature_importance_using_permutation_importance(model, X_test, y_test, features, algorithm):
-    # Use permutation importance to evaluate the importance of the features
-    # Currently supported only for Random Forests
-    perm = PermutationImportance(model, random_state=1).fit(X_test, y_test["Label"])
-    result = eli5.format_as_text(eli5.explain_weights(perm, top=100, feature_names=features))
-    print("Permutation importance results for algorithm: ", algorithm)
-    print(result)
-    print(separator)
     return None
 
 def split_testing_dataset_into_categories(X_test, y_test):
@@ -185,6 +173,88 @@ def split_testing_dataset_into_categories(X_test, y_test):
 
     # This will hold testing samples per malware family, e.g. per_category_test["bamital"] holds testing samples for bamital
     return per_category_test
+
+def explain_with_shap_summary_plots(model, model_shap_values, family, test_sample, algorithm):
+    # Plot bar summary plot using SHAP values
+    prepend_path = os.path.join("..", "..", "files", "results", str(algorithm), str(family), "summary-plots")
+    command = "mkdir " + prepend_path
+    subprocess.run(command, shell=True)
+
+    fig = plt.clf()
+    shap.summary_plot(model_shap_values, test_sample, plot_type="bar", show=False)
+    name = prepend_path + str(family) + "-summarybar-original-" + str(algorithm) + ".png"
+    plt.savefig(name)
+    plt.close("all")
+
+    plt.xlim(-1, 1)
+    name = prepend_path + str(family) + "-summarybar-xlim-11-" + str(algorithm) + ".png"
+    plt.savefig(name)
+    plt.close("all")
+
+    # Plot summary plot using SHAP values
+    fig = plt.clf()
+    shap.summary_plot(model_shap_values, test_sample, show=False)
+    name = prepend_path + str(family) + "-summaryplot-original-" + str(algorithm) + ".png"
+    plt.savefig(name)
+    plt.close("all")
+
+    plt.xlim(-1, 1)
+    name = prepend_path + str(family) + "-summaryplot-xlim-11-" + str(algorithm) + ".png"
+    plt.savefig(name)
+    plt.close("all")
+
+def explain_with_shap_dependence_plots(model, model_shap_values, family, test_sample, features, algorithm):
+    # Plot dependence plot using SHAP values for multiple features
+    prepend_path = os.path.join("..", "..", "files", "results", str(algorithm), str(family), "dependence-plots")
+    command = "mkdir " + prepend_path
+    subprocess.run(command, shell=True)
+
+    for feature in features:
+        fig = plt.clf()
+        shap.dependence_plot(feature, model_shap_values, test_sample, show=False)
+        name = prepend_path + str(family) + "-dependence-" + str(feature) + "-original-" + str(algorithm) + ".png"
+        plt.savefig(name, bbox_inches='tight')
+        plt.close("all")
+
+    return None
+
+def explain_with_force_plots(model, model_shap_values, family, test_sample, names_sample, algorithm, model_explainer):
+    # Plot force plots using SHAP values (local explanations)
+    prepend_path = os.path.join("..", "..", "files", "results", str(algorithm), str(family), "force-plots")
+    command = "mkdir " + prepend_path
+    subprocess.run(command, shell=True)
+
+    predictions = model.predict(test_sample)
+    index_values = list(test_sample.index.values)
+    sequence = 0
+    for index in index_values:
+        original_name = names_sample[index]
+        name = original_name.replace(".", "+")
+        prediction = predictions[sequence]
+
+        fig = plt.clf()
+        shap.force_plot(model_explainer.expected_value, model_shap_values[sequence, :], test_sample.loc[index],
+                        matplotlib=True, show=False)
+        name_of_file = prepend_path + str(family) + "-force-" + str(sequence) + "-name-" + str(
+            name) + "-prediction-" + str(prediction) + "-" + str(algorithm) + "-original.png"
+        plt.title(original_name, y=1.5)
+        plt.savefig(name_of_file, bbox_inches='tight')
+        plt.close("all")
+
+        fig = plt.clf()
+        shap.force_plot(model_explainer.expected_value, model_shap_values[sequence, :], test_sample.loc[index],
+                        matplotlib=True, show=False, contribution_threshold=0.1)
+        name_of_file = prepend_path + str(family) + "-force-" + str(sequence) + "-name-" + str(
+            name) + "-prediction-" + str(prediction) + "-" + str(algorithm) + "-threshold01.png"
+        plt.title(original_name, y=1.5)
+        plt.savefig(name_of_file, bbox_inches='tight')
+        plt.close("all")
+
+        sequence += 1
+        # Plot only the first 100 or less if no more than 100 exist
+        if sequence == 1000:
+            break
+    return None
 
 
 if __name__ == "__main__":
@@ -268,4 +338,65 @@ if __name__ == "__main__":
         print(len(y_train))
         print(separator)
 
-    train_and_test_model(X_train, y_train, X_test, y_test)
+    # Split testing dataset into categories based on malware family
+    per_category_test = split_testing_dataset_into_categories(X_test, y_test)
+
+    # Keeping the names will prove useful for local explainability (force plots)
+    test_sample = {}
+    names_sample = {}
+    for family in per_category_test.keys():
+        if DEBUG == True:
+            print("Processing family: ", family)
+        if len(per_category_test[family]) < SAMPLES_NUMBER:
+            test_sample[family] = shap.utils.sample(per_category_test[family], len(per_category_test[family]),
+                                                    random_state=1452)
+        else:
+            test_sample[family] = shap.utils.sample(per_category_test[family], SAMPLES_NUMBER, random_state=1452)
+        names_sample[family] = test_sample[family].iloc[:, -1]
+        test_sample[family] = test_sample[family].iloc[:, 0:-1]
+
+    if DEBUG == True:
+        print(separator)
+        print("Test sample dataframe for all:")
+        print(test_sample["all"])
+        print(test_sample["all"].shape)
+        print(separator)
+        print("Names sample dataframe for all:")
+        print(names_sample["all"])
+        print(names_sample["all"].shape)
+        print(separator)
+
+    # SHAP will run forever if you give the entire the training dataset. We use k-means to reduce the training dataset into specific centroids
+    background = shap.kmeans(X_train, K_MEANS_CLUSTERS)
+
+    if DEBUG == True:
+        print("Number of k-means clusters:")
+        print(K_MEANS_CLUSTERS)
+        print(separator)
+
+    # Algorithms to consider for interpretations
+    algorithms = ["randomforest"]
+
+    # A dictionary to hold trained models
+    model_gs = {}
+    model_explainer = {}
+
+    for algorithm in algorithms:
+        if DEBUG == True:
+            print("Execution for algorithm: ", algorithm)
+
+        # Train the machine/deep learning model
+        model_temp = train_model(X_train, y_train)
+        model_gs[algorithm] = model_temp
+        # Evaluate the machine/deep learning model
+        evaluate_model(model_gs[algorithm], X_test, y_test)
+
+        for family in per_category_test.keys():
+            # Get accuracy calculations on testing dataset per malware family
+            evaluate_model_on_family(model_gs[algorithm], family, test_sample[family], algorithm)
+
+        # We will derive explanations using the Kernel Explainer
+        model_explainer[algorithm] = shap.KernelExplainer(model_gs[algorithm].predict, background)
+
+    directory_path = "../../files/results/random_forest_binary"
+    os.makedirs(directory_path, exist_ok=True)
