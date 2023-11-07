@@ -204,5 +204,3 @@ if __name__ == "__main__":
     #     print(separator)
 
     train_and_test_model(X_train, y_train, X_test, y_test)
-
-# fdw.close()

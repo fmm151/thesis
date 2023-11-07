@@ -15,29 +15,16 @@ CORRELATION_THRESHOLD = 0.9
 import os
 import numpy as np
 import pandas as pd
-from sklearn import ensemble
-import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-import tensorflow as tf
-
-tf.compat.v1.disable_v2_behavior()
 import subprocess
 from imblearn.over_sampling import SMOTE
 from sklearn.ensemble import RandomForestClassifier
-import seaborn as sns
 import matplotlib.pyplot as plt
-from matplotlib.pyplot import figure
-# import eli5
-# from eli5.sklearn import PermutationImportance
-from pdpbox import pdp, info_plots
 import shap
 
 # Dataset to load
 filename = "../../files/labeled_dataset_features.csv"
-
-# Families to be more used
-thesis_families = ["bamital", "dircrypt", "matsnu", "volatilecedar", "all_DGAs"]
 
 # Families considered for SHAP interpretations
 families = ["tranco", "bamital", "banjori", "bedep", "beebone", "blackhole", "bobax", "ccleaner",
@@ -182,26 +169,19 @@ def explain_with_shap_summary_plots(model, model_shap_values, family, test_sampl
 
     fig = plt.clf()
     shap.summary_plot(model_shap_values, test_sample, plot_type="bar", show=False)
-    name = prepend_path + str(family) + "-summarybar-original-" + str(algorithm) + ".png"
-    plt.savefig(name)
-    plt.close("all")
-
-    plt.xlim(-1, 1)
-    name = prepend_path + str(family) + "-summarybar-xlim-11-" + str(algorithm) + ".png"
+    name = os.path.join(prepend_path, f"{family}-summarybar-original-{algorithm}.png")
     plt.savefig(name)
     plt.close("all")
 
     # Plot summary plot using SHAP values
     fig = plt.clf()
     shap.summary_plot(model_shap_values, test_sample, show=False)
-    name = prepend_path + str(family) + "-summaryplot-original-" + str(algorithm) + ".png"
+    name = os.path.join(prepend_path, f"{family}-summaryplot-original-{algorithm}.png")
     plt.savefig(name)
     plt.close("all")
 
-    plt.xlim(-1, 1)
-    name = prepend_path + str(family) + "-summaryplot-xlim-11-" + str(algorithm) + ".png"
-    plt.savefig(name)
-    plt.close("all")
+    return None
+
 
 def explain_with_shap_dependence_plots(model, model_shap_values, family, test_sample, features, algorithm):
     # Plot dependence plot using SHAP values for multiple features
@@ -212,7 +192,7 @@ def explain_with_shap_dependence_plots(model, model_shap_values, family, test_sa
     for feature in features:
         fig = plt.clf()
         shap.dependence_plot(feature, model_shap_values, test_sample, show=False)
-        name = prepend_path + str(family) + "-dependence-" + str(feature) + "-original-" + str(algorithm) + ".png"
+        name = os.path.join(prepend_path, f"{family}-dependence-{feature}-original-{algorithm}.png")
         plt.savefig(name, bbox_inches='tight')
         plt.close("all")
 
@@ -235,8 +215,7 @@ def explain_with_force_plots(model, model_shap_values, family, test_sample, name
         fig = plt.clf()
         shap.force_plot(model_explainer.expected_value, model_shap_values[sequence, :], test_sample.loc[index],
                         matplotlib=True, show=False)
-        name_of_file = prepend_path + str(family) + "-force-" + str(sequence) + "-name-" + str(
-            name) + "-prediction-" + str(prediction) + "-" + str(algorithm) + "-original.png"
+        name_of_file = os.path.join(prepend_path, f"{family}-force-{sequence}-name-{name}-prediction-{prediction}-{algorithm}-original.png")
         plt.title(original_name, y=1.5)
         plt.savefig(name_of_file, bbox_inches='tight')
         plt.close("all")
@@ -244,16 +223,31 @@ def explain_with_force_plots(model, model_shap_values, family, test_sample, name
         fig = plt.clf()
         shap.force_plot(model_explainer.expected_value, model_shap_values[sequence, :], test_sample.loc[index],
                         matplotlib=True, show=False, contribution_threshold=0.1)
-        name_of_file = prepend_path + str(family) + "-force-" + str(sequence) + "-name-" + str(
-            name) + "-prediction-" + str(prediction) + "-" + str(algorithm) + "-threshold01.png"
+        name_of_file = os.path.join(prepend_path, f"{family}-force-{sequence}-name-{name}-prediction-{prediction}-{algorithm}-threshold01.png")
         plt.title(original_name, y=1.5)
         plt.savefig(name_of_file, bbox_inches='tight')
         plt.close("all")
 
         sequence += 1
         # Plot only the first 100 or less if no more than 100 exist
-        if sequence == 1000:
+        if sequence == 10:
             break
+
+    # plt.clf()
+    # shap.force_plot(
+    #     model_explainer.expected_value,
+    #     model_shap_values,
+    #     matplotlib=True,
+    #     show=False,
+    # )
+    #
+    # name_of_combined_file = os.path.join(
+    #     prepend_path, f"{family}-stacked-force-all-samples-{algorithm}.png"
+    # )
+    # plt.title("Combined Stacked Force Plot", y=1.5)
+    # plt.savefig(name_of_combined_file, bbox_inches="tight")
+    # plt.close("all")
+
     return None
 
 
@@ -375,28 +369,41 @@ if __name__ == "__main__":
         print(separator)
 
     # Algorithms to consider for interpretations
-    algorithms = ["randomforest"]
+    algorithm = "randomforest_binary"
 
     # A dictionary to hold trained models
     model_gs = {}
     model_explainer = {}
 
-    for algorithm in algorithms:
-        if DEBUG == True:
-            print("Execution for algorithm: ", algorithm)
+    if DEBUG == True:
+        print("Execution for algorithm: ", algorithm)
 
-        # Train the machine/deep learning model
-        model_temp = train_model(X_train, y_train)
-        model_gs[algorithm] = model_temp
-        # Evaluate the machine/deep learning model
-        evaluate_model(model_gs[algorithm], X_test, y_test)
+    # Train the machine/deep learning model
+    model_temp = train_model(X_train, y_train)
+    model_gs[algorithm] = model_temp
+    # Evaluate the machine/deep learning model
+    evaluate_model(model_gs[algorithm], X_test, y_test)
 
-        for family in per_category_test.keys():
-            # Get accuracy calculations on testing dataset per malware family
-            evaluate_model_on_family(model_gs[algorithm], family, test_sample[family], algorithm)
+    for family in per_category_test.keys():
+        # Get accuracy calculations on testing dataset per malware family
+        evaluate_model_on_family(model_gs[algorithm], family, test_sample[family], algorithm)
 
-        # We will derive explanations using the Kernel Explainer
-        model_explainer[algorithm] = shap.KernelExplainer(model_gs[algorithm].predict, background)
+    # We will derive explanations using the Kernel Explainer
+    model_explainer[algorithm] = shap.KernelExplainer(model_gs[algorithm].predict, background)
 
-    directory_path = "../../files/results/random_forest_binary"
-    os.makedirs(directory_path, exist_ok=True)
+    selected_features = df[["Reputation", "Length", "Words_Mean", "Max_Let_Seq", "Words_Freq", "Vowel_Freq",
+                            "Entropy", "DeciDig_Freq", "Max_DeciDig_Seq"]]
+
+    selected_families = ["all", "all_DGAs", "bamital", "matsnu"]
+
+    for family in selected_families:
+        print("Calculating SHAP values for family:", family)
+
+        model_shap_values = model_explainer[algorithm].shap_values(test_sample[family])
+        model_shap_values = np.asarray(model_shap_values)
+
+        explain_with_shap_summary_plots(model_gs[algorithm], model_shap_values, family, test_sample[family], algorithm)
+        explain_with_shap_dependence_plots(model_gs[algorithm], model_shap_values, family, test_sample[family],
+                                           selected_features, algorithm)
+        explain_with_force_plots(model_gs[algorithm], model_shap_values, family, test_sample[family],
+                                 names_sample[family], algorithm, model_explainer[algorithm])
