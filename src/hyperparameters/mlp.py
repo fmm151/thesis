@@ -21,7 +21,7 @@ import sys
 samples_number = 100
 
 # Dataset to load
-filename = "../../files/labeled_dataset_features.csv"
+filename = "../../files/labeled_datasets_features/labeled_dataset_features.csv"
 
 def load_dataset(filename):
     # Load the dataset in the form of a csv

@@ -9,22 +9,23 @@ CORRELATION_THRESHOLD = 0.9
 # Define the number of clusters that will represent the training dataset for SHAP framework (cannot give all training samples)
 K_MEANS_CLUSTERS = 100
 # Define the number of testing samples on which SHAP will derive interpretations
-SAMPLES_NUMBER = 300
+SAMPLES_NUMBER = 500
 
 # Import the necessary libraries (tested for Python 3.9)
 import numpy as np
-from sklearn.preprocessing import LabelEncoder
+import pickle
 import os
 import shap
 import subprocess
 import pandas as pd
 import matplotlib.pyplot as plt
+from imblearn.over_sampling import SMOTE
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 # Dataset to load
-filename = "../../files/labeled_dataset_features.csv"
+filename = "../../files/labeled_datasets_features/labeled_dataset_multiclass_features_30Κ.csv"
 
 # Families considered for SHAP interpretations
 families = ["tranco", "bamital", "banjori", "bedep", "beebone", "blackhole", "bobax", "ccleaner",
@@ -39,14 +40,33 @@ families = ["tranco", "bamital", "banjori", "bedep", "beebone", "blackhole", "bo
         "tempedrevetdd", "tinba", "tinynuke", "tofsee", "torpig", "tsifiri", "ud2", "ud3", "ud4", "urlzone", "vawtrak",
         "vidro", "vidrotid", "virut", "volatilecedar", "wd", "xshellghost", "xxhex"]
 
-def load_dataset(filename):
+families_mapping = {family: index for index, family in enumerate(families)}
+
+def load_dataset(filename, families):
     # Load the dataset in the form of a csv
     df = pd.read_csv(filename)
     headers = pd.read_csv(filename, index_col=False, nrows=0).columns.tolist()
     features = headers[0:-3]
 
+    family_counts = df['Family'].value_counts()
+    print("The number of samples for each family: \n", family_counts)
+
+    # Filter classes with counts greater than or equal to 100
+    valid_classes_500 = family_counts[family_counts >= 500].index
+    valid_classes_1000 = family_counts[family_counts >= 1000].index
+    valid_classes_2000 = family_counts[family_counts >= 2000].index
+    valid_classes_3000 = family_counts[family_counts >= 3000].index
+    families = [item for item in families if item in valid_classes_3000]
+    print("NOW HE HAVE", len(families), "families")
+
+    # Filter the DataFrame to keep only rows with valid classes
+    df = df[df['Family'].isin(valid_classes_3000)]
+
+    family_counts = df['Family'].value_counts()
+    print("The number of samples for each family:", family_counts)
+
     # Return a dataframe and the names of the features
-    return df, features
+    return df, features, families
 
 
 def drop_features_by_correlation(df):
@@ -82,22 +102,26 @@ def split_dataset(df):
     X_test = test_set.iloc[:, :-3]
     y_test = test_set.iloc[:, -3:]
 
-    print("Y TRAIN!!!!!", y_train)
-    print("Y TEST!!!!!!", y_test.iloc[:, -1:])
+    print("Y TRAIN: before mapping", y_train)
+    print("Y TEST: before mapping", y_test.iloc[:, -1:])
+    print("The mapping:\n", families_mapping)
     y_train_original = y_train
-    label_encoder = LabelEncoder()
-    y_train = label_encoder.fit_transform(y_train.values.ravel())
+    # label_encoder = LabelEncoder()
+    # y_train = label_encoder.fit_transform(y_train.values.ravel())
+    y_train = y_train_original.replace(families_mapping)
 
-    # Extract the mapping between original labels and their encoded values
-    label_mapping = {original_label: encoded_label for original_label, encoded_label in
-                     zip(y_train_original.values.ravel(), y_train)}
+    # # Extract the mapping between original labels and their encoded values
+    # label_mapping = {original_label: encoded_label for original_label, encoded_label in
+    #                  zip(y_train_original.values.ravel(), y_train)}
 
-    y_train = pd.DataFrame(y_train, columns=['Family'])
-    y_test.iloc[:, -1:] = label_encoder.fit_transform(y_test.iloc[:, -1:].values.ravel())
-    print("Y TRAIN!!!!!", y_train)
-    print("Y TEST!!!!!!", y_test.iloc[:, -1:])
+    # y_train = pd.DataFrame(y_train, columns=['Family'])
+    # y_test.iloc[:, -1:] = label_encoder.fit_transform(y_test.iloc[:, -1:].values.ravel())
+    y_test.iloc[:,-1:] = y_test.iloc[:,-1:].replace(families_mapping)
 
-    return X_train, y_train, X_test, y_test, label_mapping
+    print("Y TRAIN: after mapping", y_train)
+    print("Y TEST: after mapping", y_test.iloc[:, -1:])
+
+    return X_train, y_train, X_test, y_test #, label_mapping
 
 
 def scale_dataset(X_train, X_test):
@@ -111,14 +135,15 @@ def scale_dataset(X_train, X_test):
     return X_train, X_test
 
 
-# def oversample_data(X_train, y_train):
-#     # Oversample the data using SMOTE
-#     sm = SMOTE(random_state=42)
-#
-#     print(y_train.value_counts())
-#     X_train, y_train = sm.fit_resample(X_train, y_train)
-#
-#     return X_train, y_train
+def oversample_data(X_train, y_train):
+    # Oversample the data using SMOTE
+    sm = SMOTE(random_state=42)
+
+    print("COUNT: count for each family before oversampling", y_train.value_counts())
+    X_train, y_train = sm.fit_resample(X_train, y_train)
+    print("COUNT: count for each family after oversampling", y_train.value_counts())
+
+    return X_train, y_train
 
 
 def train_model(X_train, y_train):
@@ -160,7 +185,7 @@ def evaluate_model_on_family(model, family, x_testing, algorithm):
     print("Accuracy on sampled testing dataset for family and algorithm: ", family, algorithm, accuracy)
     return None
 
-def split_testing_dataset_into_categories(X_test, y_test, label_mapping):
+def split_testing_dataset_into_categories(X_test, y_test, families_mapping):
     # For SHAP purposes, to derive interpretations per malware family, we will split the testing dataset per malware family
     test_merged = pd.merge(left=X_test, left_index=True, right=y_test, right_index=True, how='inner')
 
@@ -170,39 +195,56 @@ def split_testing_dataset_into_categories(X_test, y_test, label_mapping):
     all_test = test_merged.iloc[:, :-2]
     per_category_test["all"] = all_test
 
-    per_category_test["all_DGAs"] = test_merged[test_merged.iloc[:, -1] != label_mapping["tranco"]].iloc[:, :-2]
+    per_category_test["all_DGAs"] = test_merged[test_merged.iloc[:, -1] != families_mapping["tranco"]].iloc[:, :-2]
 
     for family in families:
-        test = test_merged[test_merged.iloc[:, -1] == label_mapping[str(family)]]
+        test = test_merged[test_merged.iloc[:, -1] == families_mapping[str(family)]]
         test = test.iloc[:, :-2]
-        if len(test) > 0:
+        if len(test) > 100:
             per_category_test[str(family)] = test
+
+    per_category_test["hash-based"] = pd.concat([per_category_test["bamital"], per_category_test["dyre"]], ignore_index=True)
+    per_category_test["wordlist-based"] = pd.concat([per_category_test["matsnu"], per_category_test["suppobox"], per_category_test["pykspa"]], ignore_index=True)
+    per_category_test["arithmetic-based"] = pd.concat([per_category_test["banjori"], per_category_test["cryptolocker"], per_category_test["conficker"], per_category_test["nymaim"], per_category_test["pykspa"]], ignore_index=True)
+
+    print("HASH BASED", per_category_test["hash-based"], "\n")
+    print("WORDLIST BASED", per_category_test["wordlist-based"], "\n")
+    print("ARITHMETIC BASED", per_category_test["arithmetic-based"], "\n")
 
     # This will hold testing samples per malware family, e.g. per_category_test["bamital"] holds testing samples for bamital
     return per_category_test
 
-def explain_with_shap_summary_plots(model, model_shap_values, family, test_sample, algorithm):
+def explain_with_shap_summary_plots(model_shap_values, family, test_sample, algorithm, class_names):
     # Plot bar summary plot using SHAP values
-    prepend_path = os.path.join("..", "..", "files", "results", str(algorithm), str(family), "summary-plots")
+    prepend_path = os.path.join("..", "..", "files", "results", str(algorithm), str(family), "summary-plots-500")
     command = "mkdir " + prepend_path
     subprocess.run(command, shell=True)
 
-    fig = plt.clf()
-    shap.summary_plot(model_shap_values, test_sample, plot_type="bar", show=False)
-    name = os.path.join(prepend_path, f"{family}-summarybar-original-{algorithm}.png")
-    plt.savefig(name)
-    plt.close("all")
+    if family=="all":
+        print("FAMILY ALL")
+        fig = plt.clf()
+        shap.summary_plot(model_shap_values, test_sample, plot_type="bar", show=False, class_names=class_names)
+        name = os.path.join(prepend_path, f"{family}-summarybar-original-{algorithm}.png")
+        plt.savefig(name)
+        plt.close("all")
 
-    # Plot summary plot using SHAP values
-    fig = plt.clf()
-    shap.summary_plot(model_shap_values, test_sample, show=False)
-    name = os.path.join(prepend_path, f"{family}-summaryplot-original-{algorithm}.png")
-    plt.savefig(name)
-    plt.close("all")
+    else:
+        fig = plt.clf()
+        shap.summary_plot(model_shap_values, test_sample, plot_type="bar", show=False)
+        name = os.path.join(prepend_path, f"{family}-summarybar-original-{algorithm}.png")
+        plt.savefig(name)
+        plt.close("all")
 
-def explain_with_shap_dependence_plots(model, model_shap_values, family, test_sample, features, algorithm):
+        # Plot summary plot using SHAP values
+        fig = plt.clf()
+        shap.summary_plot(model_shap_values, test_sample, show=False)
+        name = os.path.join(prepend_path, f"{family}-summaryplot-original-{algorithm}.png")
+        plt.savefig(name)
+        plt.close("all")
+
+def explain_with_shap_dependence_plots(model_shap_values, family, test_sample, features, algorithm):
     # Plot dependence plot using SHAP values for multiple features
-    prepend_path = os.path.join("..", "..", "files", "results", str(algorithm), str(family), "dependence-plots")
+    prepend_path = os.path.join("..", "..", "files", "results", str(algorithm), str(family), "dependence-plots-500")
     command = "mkdir " + prepend_path
     subprocess.run(command, shell=True)
 
@@ -215,9 +257,9 @@ def explain_with_shap_dependence_plots(model, model_shap_values, family, test_sa
 
     return None
 
-def explain_with_force_plots(model, model_shap_values, family, test_sample, names_sample, algorithm, model_explainer):
+def explain_with_force_plots(model_shap_values, family, test_sample, names_sample, algorithm, model_explainer):
     # Plot force plots using SHAP values (local explanations)
-    prepend_path = os.path.join("..", "..", "files", "results", str(algorithm), str(family), "force-plots")
+    prepend_path = os.path.join("..", "..", "files", "results", str(algorithm), str(family), "force-plots-500")
     command = "mkdir " + prepend_path
     subprocess.run(command, shell=True)
 
@@ -249,14 +291,14 @@ def explain_with_force_plots(model, model_shap_values, family, test_sample, name
 
         sequence += 1
         # Plot only the first 100 or less if no more than 100 exist
-        if sequence == 10:
+        if sequence == 50:
             break
 
     return None
 
 if __name__ == "__main__":
     # Load the dataset
-    df, features = load_dataset(filename)
+    df, features, families = load_dataset(filename, families)
 
     if DEBUG == True:
         print("Before correlation: The dataframe is:")
@@ -285,8 +327,7 @@ if __name__ == "__main__":
         print(separator)
 
     # Split dataset into training and testing portions
-    X_train, y_train, X_test, y_test, label_mapping = split_dataset(df)
-    print(label_mapping)
+    X_train, y_train, X_test, y_test = split_dataset(df)
 
     if DEBUG == True:
         print("Unscaled X_train:")
@@ -337,21 +378,32 @@ if __name__ == "__main__":
     #     print(separator)
 
     # Split testing dataset into categories based on malware family
-    per_category_test = split_testing_dataset_into_categories(X_test, y_test, label_mapping)
+    per_category_test = split_testing_dataset_into_categories(X_test, y_test, families_mapping)
 
-    # Keeping the names will prove useful for local explainability (force plots)
-    test_sample = {}
-    names_sample = {}
-    for family in per_category_test.keys():
-        if DEBUG == True:
-            print("Processing family: ", family)
-        if len(per_category_test[family]) < SAMPLES_NUMBER:
-            test_sample[family] = shap.utils.sample(per_category_test[family], len(per_category_test[family]),
-                                                    random_state=1452)
-        else:
-            test_sample[family] = shap.utils.sample(per_category_test[family], SAMPLES_NUMBER, random_state=1452)
-        names_sample[family] = test_sample[family].iloc[:, -1]
-        test_sample[family] = test_sample[family].iloc[:, 0:-1]
+     # # Keeping the names will prove useful for local explainability (force plots)
+    # test_sample = {}
+    # names_sample = {}
+    # for family in per_category_test.keys():
+    #     if DEBUG == True:
+    #         print("Processing family: ", family)
+    #     if len(per_category_test[family]) < SAMPLES_NUMBER:
+    #         test_sample[family] = shap.utils.sample(per_category_test[family], len(per_category_test[family]),
+    #                                                 random_state=1452)
+    #     else:
+    #         test_sample[family] = shap.utils.sample(per_category_test[family], SAMPLES_NUMBER, random_state=1452)
+    #     names_sample[family] = test_sample[family].iloc[:, -1]
+    #     test_sample[family] = test_sample[family].iloc[:, 0:-1]
+
+    with open("test_sample_xai_500", "rb") as file:
+        test_sample = pickle.load(file)
+
+    with open("test_name_sample_xai_500", "rb") as file:
+        names_sample = pickle.load(file)
+
+    print(test_sample["all"])
+    test_df = pd.DataFrame(test_sample["all"])
+    is_included = test_df.isin(X_train).all().all()
+    print("CKECK!!! (if the pickle is included in the training set)", is_included)
 
     if DEBUG == True:
         print(separator)
@@ -365,8 +417,7 @@ if __name__ == "__main__":
         print(separator)
 
     # SHAP will run forever if you give the entire the training dataset. We use k-means to reduce the training dataset into specific centroids
-    # background = shap.kmeans(X_train, K_MEANS_CLUSTERS)
-    background = shap.utils.sample(X_train, K_MEANS_CLUSTERS, random_state=1452)
+    background = shap.kmeans(X_train, K_MEANS_CLUSTERS)
 
     if DEBUG == True:
         print("Number of k-means clusters:")
@@ -384,32 +435,40 @@ if __name__ == "__main__":
         print("Execution for algorithm: ", algorithm)
 
     # Train the machine/deep learning model
-    model_temp = train_model(X_train, y_train)
-    model_gs[algorithm] = model_temp
+    model = train_model(X_train, y_train)
+    # model_gs[algorithm] = model_temp
     # Evaluate the machine/deep learning model
-    evaluate_model(model_gs[algorithm], X_test, y_test.iloc[:, -1:])
+    evaluate_model(model, X_test, y_test.iloc[:, -1:])
 
     for family in per_category_test.keys():
         # Get accuracy calculations on testing dataset per malware family
-        evaluate_model_on_family(model_gs[algorithm], family, test_sample[family], algorithm)
+        evaluate_model_on_family(model, family, test_sample[family], algorithm)
 
     # We will derive explanations using the Kernel Explainer
-    model_explainer[algorithm] = shap.KernelExplainer(model_gs[algorithm].predict, background)
+    model_explainer = shap.KernelExplainer(model.predict, background)
 
     selected_features = df[["Reputation", "Length", "Words_Mean", "Max_Let_Seq", "Words_Freq",
                             "Vowel_Freq", "Entropy", "DeciDig_Freq", "Max_DeciDig_Seq"]]
 
-    selected_families = ["all", "bamital", "matsnu"]
+    selected_families = ["all_DGAs", "hash-based", "arithmetic-based", "wordlist-based"]
+
+    # samples_all = shap.utils.sample(X_test, SAMPLES_NUMBER, random_state=1452)
+    # model_shap_values = model_explainer.shap_values(samples_all)
+    # model_shap_values = np.asarray(model_shap_values)
+    # explain_with_shap_summary_plots(model_shap_values, "all", test_sample[family], algorithm, selected_class_names)
 
 
     for family in selected_families:
-        print("Calculating SHAP values for family:", family)
 
-        model_shap_values = model_explainer[algorithm].shap_values(test_sample[family])
+        print("Calculating SHAP values for family:", family)
+        print("This is the test sample:\n", test_sample[family])
+
+        model_shap_values = model_explainer.shap_values(test_sample[family])
         model_shap_values = np.asarray(model_shap_values)
 
-        explain_with_shap_summary_plots(model_gs[algorithm], model_shap_values, family, test_sample[family], algorithm)
-        explain_with_shap_dependence_plots(model_gs[algorithm], model_shap_values, family, test_sample[family],
+
+        explain_with_shap_summary_plots(model_shap_values, family, test_sample[family], algorithm, families)
+        explain_with_shap_dependence_plots(model_shap_values, family, test_sample[family],
                                            selected_features, algorithm)
-        explain_with_force_plots(model_gs[algorithm], model_shap_values, family, test_sample[family],
-                                 names_sample[family], algorithm, model_explainer[algorithm])
+        explain_with_force_plots(model_shap_values, family, test_sample[family], names_sample[family], algorithm,
+                                 model_explainer)

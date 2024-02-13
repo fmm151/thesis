@@ -23,30 +23,43 @@ if DEBUG == "True":
     print(separator)
 
 # Assign a number to each entry of the dgas list so that they can be discerned
-sequence = 0
-dga_dict = {}
-for dga in dgas:
-    dga_dict[dga] = sequence
-    sequence += 1
+dga_mapping = {family: index for index, family in enumerate(dgas)}
 
 if DEBUG == "True":
     print("The name categories were assigned to the following numbers")
-    print(dga_dict)
+    print(dga_mapping)
     print(separator)
 
 # The filename where everything will be stored
-filename_out = "../../files/labeled_dataset.csv"
+filename_out = "../../files/labeled_datasets_features/labeled_dataset_multiclass_30Κ.csv"
 fdw = open(filename_out, "w")
 
 total_sizes = []
 
 # How many names to keep from each DGA family (not Tranco, but DGA)
-maximum_size = 10000
+maximum_size = 30000
 
 if DEBUG == "True":
     print("Each DGA family will be included with the following number of names: ")
     print(maximum_size)
     print(separator)
+
+if DEBUG == "True":
+    print("Loading the Mozilla Firefox suffixes in a set")
+    print(separator)
+
+# Load Mozilla Firefox libraries to exclude valid domain name suffixes
+suffix_list = "../../files/suffixes.txt"
+# Load suffixes in a set
+# This should be outside the loop (TO-DO)
+fdr = open(suffix_list, "r", encoding="utf-8")
+suffixes = set()
+for line in fdr:
+    suffix = line.strip()
+    suffixes.add(suffix)
+
+fdr.close()
+
 
 for dga in dgas:
     if DEBUG == "True":
@@ -57,23 +70,7 @@ for dga in dgas:
         filename = "../../files/tranco_filtered_files/tranco_remaining.txt"
     else:
         # Load names of a specific DGA family
-        filename = "../../files/dga_10K/" + str(dga) + "_dga.csv"
-    # Load Mozilla Firefox libraries to exclude valid domain name suffixes
-    suffix_list = "../../files/suffixes.txt"
-
-    if DEBUG == "True":
-        print("Loading the Mozilla Firefox suffixes in a set")
-        print(separator)
-
-    # Load suffixes in a set
-    # This should be outside the loop (TO-DO)
-    fdr = open(suffix_list, "r", encoding="utf-8")
-    suffixes = set()
-    for line in fdr:
-        suffix = line.strip()
-        suffixes.add(suffix)
-
-    fdr.close()
+        filename = "../../files/dga_30K/" + str(dga) + "_dga.csv"
 
     fdr = open(filename, "r", encoding="utf-8")
 
@@ -96,7 +93,7 @@ for dga in dgas:
             prefix_set.add(to_add)
         except:
             pass
-        if (dga == "tranco" and len(prefix_set) == 900000) or (dga != "tranco" and len(prefix_set) == maximum_size):
+        if (dga == "tranco" and len(prefix_set) == maximum_size) or (dga != "tranco" and len(prefix_set) == maximum_size):
             break
 
     fdr.close()

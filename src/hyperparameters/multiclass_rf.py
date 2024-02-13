@@ -19,20 +19,48 @@ from imblearn.over_sampling import SMOTE
 import sys
 
 # Dataset to load
-filename = "../../files/labeled_dataset_features.csv"
+filename = "../../files/labeled_datasets_features/labeled_dataset_multiclass_features.csv"
 
 # file_out = "../../files/results/grid_search_results_multiclass_rf.csv"
 # fdw = open(file_out, "w")
+families = ["tranco", "bamital", "banjori", "bedep", "beebone", "blackhole", "bobax", "ccleaner",
+        "chinad", "chir", "conficker", "corebot", "cryptolocker", "darkshell", "diamondfox", "dircrypt",
+        "dmsniff", "dnsbenchmark", "dnschanger", "downloader", "dyre", "ebury", "ekforward", "emotet",
+        "feodo", "fobber", "gameover", "gozi", "goznym", "gspy", "hesperbot", "infy",
+        "locky", "madmax", "makloader", "matsnu", "mirai", "modpack", "monerominer", "murofet",
+        "murofetweekly", "mydoom", "necurs", "nymaim2", "nymaim", "oderoor", "omexo", "padcrypt",
+        "pandabanker", "pitou", "proslikefan", "pushdo", "pushdotid", "pykspa2", "pykspa2s", "pykspa",
+        "qadars", "qakbot", "qhost", "qsnatch", "ramdo", "ramnit", "ranbyus", "randomloader", "redyms", "rovnix",
+        "shifu", "simda", "sisron", "sphinx", "suppobox", "sutra", "symmi", "szribi", "tempedreve",
+        "tempedrevetdd", "tinba", "tinynuke", "tofsee", "torpig", "tsifiri", "ud2", "ud3", "ud4", "urlzone", "vawtrak",
+        "vidro", "vidrotid", "virut", "volatilecedar", "wd", "xshellghost", "xxhex"]
 
+families_mapping = {family: index for index, family in enumerate(families)}
 
-def load_dataset(filename):
+def load_dataset(filename, families):
     # Load the dataset in the form of a csv
     df = pd.read_csv(filename)
     headers = pd.read_csv(filename, index_col=False, nrows=0).columns.tolist()
     features = headers[0:-3]
 
+    family_counts = df['Family'].value_counts()
+    print("The number of samples for each family: \n", family_counts)
+
+    # Filter classes with counts greater than or equal to 100
+    valid_classes_500 = family_counts[family_counts >= 500].index
+    valid_classes_1000 = family_counts[family_counts >= 1000].index
+    valid_classes_2000 = family_counts[family_counts >= 2000].index
+    families = [item for item in families if item in valid_classes_1000]
+    print("NOW HE HAVE", len(families), "families")
+
+    # Filter the DataFrame to keep only rows with valid classes
+    df = df[df['Family'].isin(valid_classes_1000)]
+
+    family_counts = df['Family'].value_counts()
+    print("The number of samples for each family:", family_counts)
+
     # Return a dataframe and the names of the features
-    return df, features
+    return df, features, families
 
 
 def drop_features_by_correlation(df):
@@ -68,7 +96,26 @@ def split_dataset(df):
     X_test = test_set.iloc[:, :-3]
     y_test = test_set.iloc[:, -3:]
 
-    return X_train, y_train, X_test, y_test
+    print("Y TRAIN!!!!!", y_train)
+    print("Y TEST!!!!!!", y_test.iloc[:, -1:])
+    print("The mapping:\n", families_mapping)
+    y_train_original = y_train
+    # label_encoder = LabelEncoder()
+    # y_train = label_encoder.fit_transform(y_train.values.ravel())
+    y_train = y_train_original.replace(families_mapping)
+
+    # # Extract the mapping between original labels and their encoded values
+    # label_mapping = {original_label: encoded_label for original_label, encoded_label in
+    #                  zip(y_train_original.values.ravel(), y_train)}
+
+    # y_train = pd.DataFrame(y_train, columns=['Family'])
+    # y_test.iloc[:, -1:] = label_encoder.fit_transform(y_test.iloc[:, -1:].values.ravel())
+    y_test.iloc[:,-1:] = y_test.iloc[:,-1:].replace(families_mapping)
+
+    print("Y TRAIN!!!!!", y_train)
+    print("Y TEST!!!!!!", y_test.iloc[:, -1:])
+
+    return X_train, y_train, X_test, y_test #, label_mapping
 
 
 def scale_dataset(X_train, X_test):
@@ -85,46 +132,49 @@ def scale_dataset(X_train, X_test):
 def oversample_data(X_train, y_train):
     # Oversample the data using SMOTE
     sm = SMOTE(random_state=42)
+
+    print("COUNT!!!!!!!!!!!!!", y_train.value_counts())
     X_train, y_train = sm.fit_resample(X_train, y_train)
 
     return X_train, y_train
 
-
 def train_and_test_model(X_train, y_train, X_test, y_test):
     rng = np.random.RandomState(42)
 
-    # os.remove("../../files/results/results_multiclass_rf.csv")
-    open("../../files/results/results_multiclass_rf.csv", "w").close()
-    open("../../files/results/predictions_multiclass_rf.csv", "w").close()
+    # # os.remove("../../files/results/results_multiclass_rf.csv")
+    # open("../../files/results/results_multiclass_rf.csv", "w").close()
+    # open("../../files/results/predictions_multiclass_rf.csv", "w").close()
 
-    for estimators in [10]:#range(10, 250, 50):
+    for estimators in range(10, 250, 50):
         for depth in range(10, 250, 50):
             model = RandomForestClassifier(n_estimators=estimators, max_depth=depth, n_jobs=-1, random_state=rng)
             model.fit(X_train, y_train.values.ravel())
             predictions = model.predict(X_test)
 
-            accuracy = accuracy_score(y_test["Family"].values, predictions)
+            arr1 = predictions.astype(int)
+            arr2 = y_test["Family"].values.astype(int)
+            accuracy = accuracy_score(arr2, arr1, normalize=True)
 
             if DEBUG == True:
                 txt = str(accuracy) + "," + str(estimators) + "," + str(depth)
                 print(txt)
 
-            to_write = str(accuracy) + "," + str(estimators) + "," + str(depth)
-            with open('../../files/results/results_multiclass_rf.csv', 'a') as f:
-                f.write(to_write + "\n")
+            # to_write = str(accuracy) + "," + str(estimators) + "," + str(depth)
+            # with open('../../files/results/results_multiclass_rf_30Κ.csv', 'a') as f:
+            #     f.write(to_write + "\n")
 
-            to_write = ", ".join(predictions)
-            to_write_ = ", ".join(y_test["Family"].values)
-            with open('../../files/results/predictions_multiclass_rf.csv', 'a') as f:
-                f.write(to_write + "\n" + to_write_ + "\n" + "\n")
-            # fdw.write(to_write + "\n")
+            # to_write = ", ".join(predictions)
+            # to_write_ = ", ".join(y_test["Family"].values)
+            # with open('../../files/results/predictions_multiclass_rf.csv', 'a') as f:
+            #     f.write(to_write + "\n" + to_write_ + "\n" + "\n")
+            # # fdw.write(to_write + "\n")
 
     return None
 
 
 if __name__ == "__main__":
     # Load the dataset
-    df, features = load_dataset(filename)
+    df, features, families = load_dataset(filename, families)
 
     if DEBUG == True:
         print("Before correlation: The dataframe is:")
@@ -193,14 +243,14 @@ if __name__ == "__main__":
         print(separator)
 
     # Data oversampling to deal with class imbalance
-    # X_train, y_train = oversample_data(X_train, y_train)
+    X_train, y_train = oversample_data(X_train, y_train)
 
-    # if DEBUG == True:
-    #     print("Size of oversampled X_train:")
-    #     print(len(X_train))
-    #     print(separator)
-    #     print("Size of oversampled y_train:")
-    #     print(len(y_train))
-    #     print(separator)
+    if DEBUG == True:
+        print("Size of oversampled X_train:")
+        print(len(X_train))
+        print(separator)
+        print("Size of oversampled y_train:")
+        print(len(y_train))
+        print(separator)
 
     train_and_test_model(X_train, y_train, X_test, y_test)

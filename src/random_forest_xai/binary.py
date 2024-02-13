@@ -7,13 +7,14 @@ separator = "-------------------------------------------------------------------
 # Define the number of clusters that will represent the training dataset for SHAP framework (cannot give all training samples)
 K_MEANS_CLUSTERS = 100
 # Define the number of testing samples on which SHAP will derive interpretations
-SAMPLES_NUMBER = 300
+SAMPLES_NUMBER = 500
 # Correlation threshold for Pearson correlation. For feature pairs with correlation higher than the threshold, one feature is dropped
 CORRELATION_THRESHOLD = 0.9
 
 # Import the necessary libraries (tested for Python 3.9)
 import os
 import numpy as np
+import pickle
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
@@ -24,7 +25,7 @@ import matplotlib.pyplot as plt
 import shap
 
 # Dataset to load
-filename = "../../files/labeled_dataset_features.csv"
+filename = "../../files/labeled_datasets_features/labeled_dataset_features.csv"
 
 # Families considered for SHAP interpretations
 families = ["tranco", "bamital", "banjori", "bedep", "beebone", "blackhole", "bobax", "ccleaner",
@@ -41,14 +42,28 @@ families = ["tranco", "bamital", "banjori", "bedep", "beebone", "blackhole", "bo
 
 
 
-def load_dataset(filename):
+def load_dataset(filename, families):
     # Load the dataset in the form of a csv
     df = pd.read_csv(filename)
     headers = pd.read_csv(filename, index_col=False, nrows=0).columns.tolist()
     features = headers[0:-3]
 
+    family_counts = df['Family'].value_counts()
+    print("The number of samples for each family:", family_counts)
+
+    # Filter classes with counts greater than or equal to 100
+    valid_classes = family_counts[family_counts >= 2000].index
+    families = [item for item in families if item in valid_classes]
+    print("NOW HE HAVE", len(families), families)
+
+    # Filter the DataFrame to keep only rows with valid classes
+    df = df[df['Family'].isin(valid_classes)]
+
+    family_counts = df['Family'].value_counts()
+    print("The number of samples for each family:", family_counts)
+
     # Return a dataframe and the names of the features
-    return df, features
+    return df, features, families
 
 
 def drop_features_by_correlation(df):
@@ -83,7 +98,6 @@ def split_dataset(df):
     y_train = train_set.iloc[:, -2:-1]
     X_test = test_set.iloc[:, :-3]
     y_test = test_set.iloc[:, -3:]
-
 
     return X_train, y_train, X_test, y_test
 
@@ -158,6 +172,14 @@ def split_testing_dataset_into_categories(X_test, y_test):
         if len(test) > 0:
             per_category_test[str(family)] = test
 
+    per_category_test["hash-based"] = pd.concat([per_category_test["bamital"], per_category_test["dyre"]], ignore_index=True)
+    per_category_test["wordlist-based"] = pd.concat([per_category_test["matsnu"], per_category_test["suppobox"], per_category_test["pykspa"]], ignore_index=True)
+    per_category_test["arithmetic-based"] = pd.concat([per_category_test["banjori"], per_category_test["cryptolocker"], per_category_test["conficker"], per_category_test["nymaim"], per_category_test["pykspa"]], ignore_index=True)
+
+    print("HASH BASED", per_category_test["hash-based"], "\n")
+    print("WORDLIST BASED", per_category_test["wordlist-based"], "\n")
+    print("ARITHMETIC BASED", per_category_test["arithmetic-based"], "\n")
+
     # This will hold testing samples per malware family, e.g. per_category_test["bamital"] holds testing samples for bamital
     return per_category_test
 
@@ -166,6 +188,13 @@ def explain_with_shap_summary_plots(model, model_shap_values, family, test_sampl
     prepend_path = os.path.join("..", "..", "files", "results", str(algorithm), str(family), "summary-plots")
     command = "mkdir " + prepend_path
     subprocess.run(command, shell=True)
+
+    if family == "all":
+        fig = plt.clf()
+        shap.summary_plot(model_shap_values, test_sample, plot_type="bar", show=False, class_names={0:"benign", 1:"malicious"}, class_inds="original", cmap=plt.get_cmap("tab10"))
+        name = os.path.join(prepend_path, f"{family}-summarybar-original-{algorithm}.png")
+        plt.savefig(name)
+        plt.close("all")
 
     fig = plt.clf()
     shap.summary_plot(model_shap_values, test_sample, plot_type="bar", show=False)
@@ -230,7 +259,7 @@ def explain_with_force_plots(model, model_shap_values, family, test_sample, name
 
         sequence += 1
         # Plot only the first 100 or less if no more than 100 exist
-        if sequence == 10:
+        if sequence == 50:
             break
 
     # plt.clf()
@@ -253,7 +282,7 @@ def explain_with_force_plots(model, model_shap_values, family, test_sample, name
 
 if __name__ == "__main__":
     # Load the dataset
-    df, features = load_dataset(filename)
+    df, features, families = load_dataset(filename, families)
 
     if DEBUG == True:
         print("Before correlation: The dataframe is:")
@@ -334,6 +363,7 @@ if __name__ == "__main__":
 
     # Split testing dataset into categories based on malware family
     per_category_test = split_testing_dataset_into_categories(X_test, y_test)
+    print("AAAAAAAAAAAAAA", per_category_test["all"])
 
     # Keeping the names will prove useful for local explainability (force plots)
     test_sample = {}
@@ -343,13 +373,21 @@ if __name__ == "__main__":
             print("Processing family: ", family)
         if len(per_category_test[family]) < SAMPLES_NUMBER:
             test_sample[family] = shap.utils.sample(per_category_test[family], len(per_category_test[family]),
-                                                    random_state=1452)
+                                                    random_state=184)
         else:
-            test_sample[family] = shap.utils.sample(per_category_test[family], SAMPLES_NUMBER, random_state=1452)
+            test_sample[family] = shap.utils.sample(per_category_test[family], SAMPLES_NUMBER, random_state=184)
+
         names_sample[family] = test_sample[family].iloc[:, -1]
         test_sample[family] = test_sample[family].iloc[:, 0:-1]
 
+        with open("test_sample_xai_500", "wb") as file:
+            pickle.dump(test_sample, file)
+
+        with open("test_name_sample_xai_500", "wb") as file:
+            pickle.dump(names_sample, file)
+
     if DEBUG == True:
+
         print(separator)
         print("Test sample dataframe for all:")
         print(test_sample["all"])
@@ -362,6 +400,7 @@ if __name__ == "__main__":
 
     # SHAP will run forever if you give the entire the training dataset. We use k-means to reduce the training dataset into specific centroids
     background = shap.kmeans(X_train, K_MEANS_CLUSTERS)
+    # background = shap.utils.sample(X_train, K_MEANS_CLUSTERS)
 
     if DEBUG == True:
         print("Number of k-means clusters:")
@@ -394,10 +433,12 @@ if __name__ == "__main__":
     selected_features = df[["Reputation", "Length", "Words_Mean", "Max_Let_Seq", "Words_Freq", "Vowel_Freq",
                             "Entropy", "DeciDig_Freq", "Max_DeciDig_Seq"]]
 
-    selected_families = ["all", "all_DGAs", "bamital", "matsnu"]
+    selected_families = ["all", "all_DGAs", "bamital", "matsnu", "banjori"]
+
 
     for family in selected_families:
         print("Calculating SHAP values for family:", family)
+        print("This is the test sample:\n", test_sample[family])
 
         model_shap_values = model_explainer[algorithm].shap_values(test_sample[family])
         model_shap_values = np.asarray(model_shap_values)

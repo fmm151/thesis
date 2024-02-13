@@ -13,7 +13,7 @@ samples_number = 100
 number_of_classes = 94
 
 # Dataset to load
-filename = "../../files/labeled_dataset_features.csv"
+filename = "../../files/labeled_datasets_features/labeled_dataset_features.csv"
 
 
 def load_dataset(filename):

@@ -279,8 +279,8 @@ def export_features(name, name_original, label, family, whitelist):
 
 if __name__ == "__main__":
     whitelist = get_ngram_whitelist()
-    filename = "../../files/labeled_dataset.csv"
-    filename_out = "../../files/labeled_dataset_features.csv"
+    filename = "../../files/labeled_datasets_features/labeled_dataset_multiclass_30Κ.csv"
+    filename_out = "../../files/labeled_datasets_features/labeled_dataset_multiclass_features_30Κ.csv"
     fdr = open(filename, "r")
     fdw = open(filename_out, "w")
 
