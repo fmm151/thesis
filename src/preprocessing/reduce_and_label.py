@@ -31,13 +31,13 @@ if DEBUG == "True":
     print(separator)
 
 # The filename where everything will be stored
-filename_out = "../../files/labeled_datasets_features/labeled_dataset_multiclass_30Κ.csv"
+filename_out = "../../files/labeled_datasets_features/labeled_dataset_multiclass_20Κ.csv"
 fdw = open(filename_out, "w")
 
 total_sizes = []
 
 # How many names to keep from each DGA family (not Tranco, but DGA)
-maximum_size = 30000
+maximum_size = 20000
 
 if DEBUG == "True":
     print("Each DGA family will be included with the following number of names: ")
@@ -70,7 +70,7 @@ for dga in dgas:
         filename = "../../files/tranco_filtered_files/tranco_remaining.txt"
     else:
         # Load names of a specific DGA family
-        filename = "../../files/dga_30K/" + str(dga) + "_dga.csv"
+        filename = "../../files/dga_20K/" + str(dga) + "_dga.csv"
 
     fdr = open(filename, "r", encoding="utf-8")
 

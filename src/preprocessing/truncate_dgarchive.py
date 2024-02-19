@@ -3,14 +3,14 @@ from tqdm import tqdm
 import pandas as pd
 
 input_folder = '../../files/2020-06-19-dgarchive_full'
-output_folder = '../../files/dga_30K'\
+output_folder = '../../files/dga_20K'
 
 if not os.path.exists(output_folder):
     os.makedirs(output_folder)
 
 
 # Function to randomly select up to 10,000 rows from a CSV file
-def random_sample_csv(input_file, output_file, num_rows=30000):
+def random_sample_csv(input_file, output_file, num_rows=20000):
     df = pd.read_csv(input_file)
     if len(df) <= num_rows:
         # If the file has 10,000 or fewer rows, keep all rows
@@ -32,9 +32,9 @@ for filename in tqdm(os.listdir(input_folder)):
             os.remove(out_file)
 
         # Call the random_sample_csv function to select up to 10,000 rows
-        random_sample_csv(in_file, out_file, num_rows=30000)
+        random_sample_csv(in_file, out_file, num_rows=20000)
 
-folder_path = '../../files/dga_30K'
+folder_path = '../../files/dga_20K'
 csv_files = [f for f in os.listdir(folder_path) if f.endswith('.csv')]
 
 # first_column = pd.Series()

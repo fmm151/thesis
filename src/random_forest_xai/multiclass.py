@@ -10,6 +10,8 @@ CORRELATION_THRESHOLD = 0.9
 K_MEANS_CLUSTERS = 100
 # Define the number of testing samples on which SHAP will derive interpretations
 SAMPLES_NUMBER = 500
+# Batch size for batch processing
+BATCH_SIZE = 309731
 
 # Import the necessary libraries (tested for Python 3.9)
 import numpy as np
@@ -18,29 +20,33 @@ import os
 import shap
 import subprocess
 import pandas as pd
+import xgboost as xgb
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import LabelEncoder
 from imblearn.over_sampling import SMOTE
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 # Dataset to load
-filename = "../../files/labeled_datasets_features/labeled_dataset_multiclass_features_30Κ.csv"
+filename = "../../files/labeled_datasets_features/labeled_dataset_multiclass_features_20Κ.csv"
 
 # Families considered for SHAP interpretations
 families = ["tranco", "bamital", "banjori", "bedep", "beebone", "blackhole", "bobax", "ccleaner",
-        "chinad", "chir", "conficker", "corebot", "cryptolocker", "darkshell", "diamondfox", "dircrypt",
-        "dmsniff", "dnsbenchmark", "dnschanger", "downloader", "dyre", "ebury", "ekforward", "emotet",
-        "feodo", "fobber", "gameover", "gozi", "goznym", "gspy", "hesperbot", "infy",
-        "locky", "madmax", "makloader", "matsnu", "mirai", "modpack", "monerominer", "murofet",
-        "murofetweekly", "mydoom", "necurs", "nymaim2", "nymaim", "oderoor", "omexo", "padcrypt",
-        "pandabanker", "pitou", "proslikefan", "pushdo", "pushdotid", "pykspa2", "pykspa2s", "pykspa",
-        "qadars", "qakbot", "qhost", "qsnatch", "ramdo", "ramnit", "ranbyus", "randomloader", "redyms", "rovnix",
-        "shifu", "simda", "sisron", "sphinx", "suppobox", "sutra", "symmi", "szribi", "tempedreve",
-        "tempedrevetdd", "tinba", "tinynuke", "tofsee", "torpig", "tsifiri", "ud2", "ud3", "ud4", "urlzone", "vawtrak",
-        "vidro", "vidrotid", "virut", "volatilecedar", "wd", "xshellghost", "xxhex"]
+            "chinad", "chir", "conficker", "corebot", "cryptolocker", "darkshell", "diamondfox", "dircrypt",
+            "dmsniff", "dnsbenchmark", "dnschanger", "downloader", "dyre", "ebury", "ekforward", "emotet",
+            "feodo", "fobber", "gameover", "gozi", "goznym", "gspy", "hesperbot", "infy",
+            "locky", "madmax", "makloader", "matsnu", "mirai", "modpack", "monerominer", "murofet",
+            "murofetweekly", "mydoom", "necurs", "nymaim2", "nymaim", "oderoor", "omexo", "padcrypt",
+            "pandabanker", "pitou", "proslikefan", "pushdo", "pushdotid", "pykspa2", "pykspa2s", "pykspa",
+            "qadars", "qakbot", "qhost", "qsnatch", "ramdo", "ramnit", "ranbyus", "randomloader", "redyms", "rovnix",
+            "shifu", "simda", "sisron", "sphinx", "suppobox", "sutra", "symmi", "szribi", "tempedreve",
+            "tempedrevetdd", "tinba", "tinynuke", "tofsee", "torpig", "tsifiri", "ud2", "ud3", "ud4", "urlzone",
+            "vawtrak",
+            "vidro", "vidrotid", "virut", "volatilecedar", "wd", "xshellghost", "xxhex"]
 
 families_mapping = {family: index for index, family in enumerate(families)}
+
 
 def load_dataset(filename, families):
     # Load the dataset in the form of a csv
@@ -92,7 +98,7 @@ def drop_features_by_correlation(df):
     return to_drop, df, features
 
 
-def split_dataset(df):
+def split_dataset(df, families):
     # Split the dataset into training and testing sets
     train_set, test_set = train_test_split(df, test_size=0.2, random_state=2345, shuffle=True)
 
@@ -116,12 +122,12 @@ def split_dataset(df):
 
     # y_train = pd.DataFrame(y_train, columns=['Family'])
     # y_test.iloc[:, -1:] = label_encoder.fit_transform(y_test.iloc[:, -1:].values.ravel())
-    y_test.iloc[:,-1:] = y_test.iloc[:,-1:].replace(families_mapping)
+    y_test.iloc[:, -1:] = y_test.iloc[:, -1:].replace(families_mapping)
 
     print("Y TRAIN: after mapping", y_train)
     print("Y TEST: after mapping", y_test.iloc[:, -1:])
 
-    return X_train, y_train, X_test, y_test #, label_mapping
+    return X_train, y_train, X_test, y_test  # , label_mapping
 
 
 def scale_dataset(X_train, X_test):
@@ -149,12 +155,20 @@ def oversample_data(X_train, y_train):
 def train_model(X_train, y_train):
     rng = np.random.RandomState(42)
 
-    model = RandomForestClassifier(n_estimators=10, max_depth=50, n_jobs=-1, random_state=rng)
+    model = RandomForestClassifier(n_estimators=10, max_depth=100, n_jobs=-1, random_state=rng)
+    # model = xgb.XGBClassifier(n_estimators=50, max_depth=100, random_state=rng)
     model.fit(X_train, y_train.values.ravel())
+    # Train the model in batches
+    # for i in range(0, len(X_train), batch_size):
+    #     X_batch = X_train.iloc[i:i+batch_size, :]
+    #     y_batch = y_train.iloc[i:i+batch_size, :].values.ravel()
+    #
+    #     model.fit(X_batch, y_batch)
 
     return model
 
-def evaluate_model(model, X_test, y_test):
+
+def evaluate_model(model, X_test, y_test, algorithm):
     predictions = model.predict(X_test)
     # predictions = np.array([int(pred) for pred in predictions], dtype=int)
 
@@ -162,9 +176,8 @@ def evaluate_model(model, X_test, y_test):
     arr1 = predictions.astype(int)
     arr2 = y_test["Family"].values.astype(int)
 
-
     # Print the different testing scores
-    print("Algorithm: Random Forest")
+    print("Algorithm: ", algorithm)
     print("Accuracy: ", accuracy_score(arr2, arr1, normalize=True))
     print("Precision: ", precision_score(arr2, arr1, average='macro', zero_division=1))
     print("Recall: ", recall_score(arr2, arr1, average='macro'))
@@ -172,6 +185,7 @@ def evaluate_model(model, X_test, y_test):
     print(separator)
 
     return None
+
 
 def evaluate_model_on_family(model, family, x_testing, algorithm):
     # Calculate accuracy for a specific malware family
@@ -184,6 +198,7 @@ def evaluate_model_on_family(model, family, x_testing, algorithm):
         accuracy = zero_values / predictions.size
     print("Accuracy on sampled testing dataset for family and algorithm: ", family, algorithm, accuracy)
     return None
+
 
 def split_testing_dataset_into_categories(X_test, y_test, families_mapping):
     # For SHAP purposes, to derive interpretations per malware family, we will split the testing dataset per malware family
@@ -203,9 +218,13 @@ def split_testing_dataset_into_categories(X_test, y_test, families_mapping):
         if len(test) > 100:
             per_category_test[str(family)] = test
 
-    per_category_test["hash-based"] = pd.concat([per_category_test["bamital"], per_category_test["dyre"]], ignore_index=True)
-    per_category_test["wordlist-based"] = pd.concat([per_category_test["matsnu"], per_category_test["suppobox"], per_category_test["pykspa"]], ignore_index=True)
-    per_category_test["arithmetic-based"] = pd.concat([per_category_test["banjori"], per_category_test["cryptolocker"], per_category_test["conficker"], per_category_test["nymaim"], per_category_test["pykspa"]], ignore_index=True)
+    per_category_test["hash-based"] = pd.concat([per_category_test["bamital"], per_category_test["dyre"]],
+                                                ignore_index=True)
+    per_category_test["wordlist-based"] = pd.concat(
+        [per_category_test["matsnu"], per_category_test["suppobox"], per_category_test["pykspa"]], ignore_index=True)
+    per_category_test["arithmetic-based"] = pd.concat(
+        [per_category_test["banjori"], per_category_test["cryptolocker"], per_category_test["conficker"],
+         per_category_test["nymaim"], per_category_test["pykspa"]], ignore_index=True)
 
     print("HASH BASED", per_category_test["hash-based"], "\n")
     print("WORDLIST BASED", per_category_test["wordlist-based"], "\n")
@@ -214,13 +233,14 @@ def split_testing_dataset_into_categories(X_test, y_test, families_mapping):
     # This will hold testing samples per malware family, e.g. per_category_test["bamital"] holds testing samples for bamital
     return per_category_test
 
+
 def explain_with_shap_summary_plots(model_shap_values, family, test_sample, algorithm, class_names):
     # Plot bar summary plot using SHAP values
     prepend_path = os.path.join("..", "..", "files", "results", str(algorithm), str(family), "summary-plots-500")
     command = "mkdir " + prepend_path
     subprocess.run(command, shell=True)
 
-    if family=="all":
+    if family == "all":
         print("FAMILY ALL")
         fig = plt.clf()
         shap.summary_plot(model_shap_values, test_sample, plot_type="bar", show=False, class_names=class_names)
@@ -242,6 +262,7 @@ def explain_with_shap_summary_plots(model_shap_values, family, test_sample, algo
         plt.savefig(name)
         plt.close("all")
 
+
 def explain_with_shap_dependence_plots(model_shap_values, family, test_sample, features, algorithm):
     # Plot dependence plot using SHAP values for multiple features
     prepend_path = os.path.join("..", "..", "files", "results", str(algorithm), str(family), "dependence-plots-500")
@@ -256,6 +277,7 @@ def explain_with_shap_dependence_plots(model_shap_values, family, test_sample, f
         plt.close("all")
 
     return None
+
 
 def explain_with_force_plots(model_shap_values, family, test_sample, names_sample, algorithm, model_explainer):
     # Plot force plots using SHAP values (local explanations)
@@ -296,9 +318,10 @@ def explain_with_force_plots(model_shap_values, family, test_sample, names_sampl
 
     return None
 
+
 if __name__ == "__main__":
     # Load the dataset
-    df, features, families = load_dataset(filename, families)
+    df, features, families_red = load_dataset(filename, families)
 
     if DEBUG == True:
         print("Before correlation: The dataframe is:")
@@ -327,7 +350,7 @@ if __name__ == "__main__":
         print(separator)
 
     # Split dataset into training and testing portions
-    X_train, y_train, X_test, y_test = split_dataset(df)
+    X_train, y_train, X_test, y_test = split_dataset(df, families_red)
 
     if DEBUG == True:
         print("Unscaled X_train:")
@@ -366,21 +389,21 @@ if __name__ == "__main__":
         print(X_test)
         print(separator)
 
-    # # Data oversampling to deal with class imbalance
-    # X_train, y_train = oversample_data(X_train, y_train)
-    #
-    # if DEBUG == True:
-    #     print("Size of oversampled X_train:")
-    #     print(len(X_train))
-    #     print(separator)
-    #     print("Size of oversampled y_train:")
-    #     print(len(y_train))
-    #     print(separator)
+    # Data oversampling to deal with class imbalance
+    X_train, y_train = oversample_data(X_train, y_train)
+
+    if DEBUG == True:
+        print("Size of oversampled X_train:")
+        print(len(X_train))
+        print(separator)
+        print("Size of oversampled y_train:")
+        print(len(y_train))
+        print(separator)
 
     # Split testing dataset into categories based on malware family
     per_category_test = split_testing_dataset_into_categories(X_test, y_test, families_mapping)
 
-     # # Keeping the names will prove useful for local explainability (force plots)
+    # # Keeping the names will prove useful for local explainability (force plots)
     # test_sample = {}
     # names_sample = {}
     # for family in per_category_test.keys():
@@ -438,7 +461,7 @@ if __name__ == "__main__":
     model = train_model(X_train, y_train)
     # model_gs[algorithm] = model_temp
     # Evaluate the machine/deep learning model
-    evaluate_model(model, X_test, y_test.iloc[:, -1:])
+    evaluate_model(model, X_test, y_test.iloc[:, -1:], algorithm)
 
     for family in per_category_test.keys():
         # Get accuracy calculations on testing dataset per malware family
@@ -457,18 +480,15 @@ if __name__ == "__main__":
     # model_shap_values = np.asarray(model_shap_values)
     # explain_with_shap_summary_plots(model_shap_values, "all", test_sample[family], algorithm, selected_class_names)
 
-
-    for family in selected_families:
-
-        print("Calculating SHAP values for family:", family)
-        print("This is the test sample:\n", test_sample[family])
-
-        model_shap_values = model_explainer.shap_values(test_sample[family])
-        model_shap_values = np.asarray(model_shap_values)
-
-
-        explain_with_shap_summary_plots(model_shap_values, family, test_sample[family], algorithm, families)
-        explain_with_shap_dependence_plots(model_shap_values, family, test_sample[family],
-                                           selected_features, algorithm)
-        explain_with_force_plots(model_shap_values, family, test_sample[family], names_sample[family], algorithm,
-                                 model_explainer)
+    # for family in selected_families:
+    #     print("Calculating SHAP values for family:", family)
+    #     print("This is the test sample:\n", test_sample[family])
+    #
+    #     model_shap_values = model_explainer.shap_values(test_sample[family])
+    #     model_shap_values = np.asarray(model_shap_values)
+    #
+    #     explain_with_shap_summary_plots(model_shap_values, family, test_sample[family], algorithm, families)
+    #     explain_with_shap_dependence_plots(model_shap_values, family, test_sample[family],
+    #                                        selected_features, algorithm)
+    #     explain_with_force_plots(model_shap_values, family, test_sample[family], names_sample[family], algorithm,
+    #                              model_explainer)
