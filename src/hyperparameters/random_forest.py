@@ -19,7 +19,7 @@ from imblearn.over_sampling import SMOTE
 import sys
 
 # Dataset to load
-filename = "../../files/labeled_datasets_features/labeled_dataset_features.csv"
+filename = "../../files/labeled_datasets_features/features.csv"
 
 # file_out = "../../files/results/grid_search_results_rf.csv"
 # fdw = open(file_out, "w")

@@ -278,19 +278,25 @@ def export_features(name, name_original, label, family, whitelist):
 
 
 if __name__ == "__main__":
-    whitelist = get_ngram_whitelist()
-    filename = "../../files/labeled_datasets_features/labeled_dataset_multiclass_20Κ.csv"
-    filename_out = "../../files/labeled_datasets_features/labeled_dataset_multiclass_features_20Κ.csv"
-    fdr = open(filename, "r")
-    fdw = open(filename_out, "w")
+    years = [ "2015", "2016", "2017", "2018", "2019"] #"2010", "2011", "2012", "2013", "2014",
+    for year in years:
+        whitelist = get_ngram_whitelist()
+        filename = "../../files/labeled_dataset/binary/labeled_dataset_binary_"+year+"_onlyclassesfrom2015_random.csv"
+        filename_out = "../../files/labeled_datasets_features/binary/binary_features_"+year+"_onlyclassesfrom2015_radnom.csv"
+        fdr = open(filename, "r")
+        fdw = open(filename_out, "w")
 
-    headers = "Length,Max_DeciDig_Seq,Max_Let_Seq,Freq_A,Freq_B,Freq_C,Freq_D,Freq_E,Freq_F,Freq_G,Freq_H,Freq_I,Freq_J,Freq_K,Freq_L,Freq_M,Freq_N,Freq_O,Freq_P,Freq_Q,Freq_R,Freq_S,Freq_T,Freq_U,Freq_V,Freq_W,Freq_X,Freq_Y,Freq_Z,Freq_0,Freq_1,Freq_2,Freq_3,Freq_4,Freq_5,Freq_6,Freq_7,Freq_8,Freq_9,Spec_Char_Freq,Ratio_Spec_Char,DeciDig_Freq,Ratio_DeciDig,Vowel_Freq,Vowel_Ratio,Max_Gap,Reputation,Words_Freq,Words_Mean,Entropy,Name,Label,Family"
-    fdw.write(headers + "\n")
+        headers = ("Length,Max_DeciDig_Seq,Max_Let_Seq,Freq_A,Freq_B,Freq_C,Freq_D,Freq_E,Freq_F,Freq_G,Freq_H,Freq_I,"
+                   "Freq_J,Freq_K,Freq_L,Freq_M,Freq_N,Freq_O,Freq_P,Freq_Q,Freq_R,Freq_S,Freq_T,Freq_U,Freq_V,Freq_W,"
+                   "Freq_X,Freq_Y,Freq_Z,Freq_0,Freq_1,Freq_2,Freq_3,Freq_4,Freq_5,Freq_6,Freq_7,Freq_8,Freq_9,"
+                   "Spec_Char_Freq,Ratio_Spec_Char,DeciDig_Freq,Ratio_DeciDig,Vowel_Freq,Vowel_Ratio,Max_Gap,"
+                   "Reputation,Words_Freq,Words_Mean,Entropy,Name,Label,Family")
+        fdw.write(headers + "\n")
 
-    for line in fdr:
-        line = line.strip()
-        name, name_original, label, family = line.split(",")
-        csv_line = export_features(name, name_original, label, family, whitelist)
-        fdw.write(csv_line + "\n")
-    fdr.close()
-    fdw.close()
+        for line in fdr:
+            line = line.strip()
+            name, name_original, label, family = line.split(",")
+            csv_line = export_features(name, name_original, label, family, whitelist)
+            fdw.write(csv_line + "\n")
+        fdr.close()
+        fdw.close()
