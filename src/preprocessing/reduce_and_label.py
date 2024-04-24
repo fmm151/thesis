@@ -3,7 +3,7 @@ import os
 import random
 
 DEBUG = True
-RANDOM = True
+RANDOM = False
 separator = "----------------------------------------"
 
 # What will be included in the final file: Tranco names and DGA's from various families
@@ -72,9 +72,9 @@ fdr.close()
 
 years = ["2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018", "2019"]
 for year in years:
-    filename_out = "../../files/labeled_dataset/binary/labeled_dataset_binary_"+year+"_onlyclassesfrom2015_random.csv"
+    filename_out = "../../files/labeled_dataset/multiclass/labeled_dataset_multiclass_20K.csv"
     fdw = open(filename_out, "w")
-    for dga in dgas_2015:
+    for dga in dgas:
         if DEBUG:
             print("Now working on: ", dga)
 
@@ -98,7 +98,7 @@ for year in years:
                     fdr.seek(0)
 
                     # Calculate how many lines you want to sample
-                    max_target = 90000 if dga == 'tranco' else 20000
+                    max_target = 0000 if dga == 'tranco' else 20000
                     p = max_target / total_lines
 
                 for line in fdr:

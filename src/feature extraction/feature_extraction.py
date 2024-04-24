@@ -278,11 +278,11 @@ def export_features(name, name_original, label, family, whitelist):
 
 
 if __name__ == "__main__":
-    years = [ "2015", "2016", "2017", "2018", "2019"] #"2010", "2011", "2012", "2013", "2014",
+    years = ["2019"] # "2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018",
     for year in years:
         whitelist = get_ngram_whitelist()
-        filename = "../../files/labeled_dataset/binary/labeled_dataset_binary_"+year+"_onlyclassesfrom2015_random.csv"
-        filename_out = "../../files/labeled_datasets_features/binary/binary_features_"+year+"_onlyclassesfrom2015_radnom.csv"
+        filename = "../../files/labeled_dataset/multiclass/labeled_dataset_multiclass_20Κ.csv"
+        filename_out = "../../files/labeled_datasets_features/multiclass/multiclass_features_20K.csv"
         fdr = open(filename, "r")
         fdw = open(filename_out, "w")
 

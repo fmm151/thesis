@@ -13,7 +13,7 @@ K_MEANS_CLUSTERS = 100
 # Define the number of testing samples on which SHAP will derive interpretations
 SAMPLES_NUMBER = 500
 
-# Import the necessary libraries (tested for Python 3.9)
+# Import the necessary libraries (tested for Python 3.11)
 import numpy as np
 import pickle
 import os
@@ -217,35 +217,41 @@ def split_testing_dataset_into_categories(X_test, y_test, families_mapping):
 def explain_with_shap_summary_plots(model_shap_values, X, algorithm, version, families_mapping):
     # Plot bar summary plot using SHAP values
     prepend_path = os.path.join("..", "..", "files", "results", "TreeClassifier", "multiclass", str(algorithm),
-                                version, "all" , "summary-plots")
+                                "all" + "_" + str(version), "summary-plots")
     command = "mkdir" + prepend_path
     subprocess.run(command, shell=True)
 
     fig = plt.clf()
-    shap.summary_plot(model_shap_values[:10], X.values, plot_type="bar", class_names={0: "tranco", 1: "bamital",
+    shap.summary_plot(model_shap_values[:10], X, plot_type="bar", class_names={0: "tranco", 1: "bamital",
                                                                                2: "banjori", 3: "matsnu", 4: "dyre",
                                                                                5: "conficker", 6: "cryptolocker",
                                                                                7: "suppobox",
                                                                                8: "nymaim", 9: "pykspa"},
-                      feature_names=features_red, show=False)
+                      feature_names=features_red)
     name = os.path.join(prepend_path, f"first10-summarybar-{algorithm}.png")
     plt.savefig(name)
     plt.close("all")
 
     fig = plt.clf()
-    shap.summary_plot(model_shap_values, X.values, plot_type="bar", feature_names=features_red, show=False)
+    shap.summary_plot(model_shap_values, X, plot_type="bar", feature_names=features_red)
     name = os.path.join(prepend_path, f"all-summarybar-{algorithm}.png")
     plt.savefig(name)
     plt.close("all")
 
+    # Plot summary plot using SHAP values
+    fig = plt.clf()
+    shap.summary_plot(model_shap_values, X.values, show=False, feature_names=X.columns)
+    name = os.path.join(prepend_path, f"all-beeswarm-{algorithm}.png")
+    plt.savefig(name)
+    plt.close("all")
 
-    for fam in range (0,10):
+    for fam in range (0,55):
         for key, value in families_mapping.items():
             if value == fam:
                 family = key
         # Plot bar summary plot using SHAP values
         prepend_path = os.path.join("..", "..", "files", "results", "TreeClassifier", "multiclass", str(algorithm),
-                                    version, str(family) , "summary-plots")
+                                    str(family) + "_" + str(version), "summary-plots")
         command = "mkdir" + prepend_path
         subprocess.run(command, shell=True)
 
@@ -258,19 +264,32 @@ def explain_with_shap_summary_plots(model_shap_values, X, algorithm, version, fa
 
 
 def explain_with_shap_dependence_plots(model_shap_values, X, features, algorithm, version, families_mapping):
-    for fam in range(0, 10):
+    # Plot dependence plot using SHAP values for multiple features
+    prepend_path = os.path.join("results", "TreeClassifier", "multiclass", str(algorithm), "all" + "_" + version,
+                                "dependence-plots")
+    command = "mkdir " + prepend_path
+    subprocess.run(command, shell=True)
+
+    for feature in features:
+        fig = plt.clf()
+        shap.dependence_plot(feature, model_shap_values, X, show=False)
+        name = os.path.join(prepend_path, f"all-dependence-{feature}-{algorithm}.png")
+        plt.savefig(name, bbox_inches='tight')
+        plt.close("all")
+
+    for fam in range(0, 55):
         for key, value in families_mapping.items():
             if value == fam:
                 family = key
         # Plot dependence plot using SHAP values for multiple features
-        prepend_path = os.path.join("..", "..", "files", "results", "TreeClassifier", "multiclass", str(algorithm),
-                                    version, str(family) , "dependence-plots")
+        prepend_path = os.path.join("results", "TreeClassifier", "multiclass", str(algorithm), str(family) + "_"
+                                    + version, "dependence-plots")
         command = "mkdir " + prepend_path
         subprocess.run(command, shell=True)
 
         for feature in features:
             fig = plt.clf()
-            shap.dependence_plot(ind=feature, shap_values=model_shap_values[fam], features=X, show=False)
+            shap.dependence_plot(feature, model_shap_values[fam], X, show=False)
             name = os.path.join(prepend_path, f"{family}-dependence-{feature}-{algorithm}.png")
             plt.savefig(name, bbox_inches='tight')
             plt.close("all")
@@ -279,13 +298,12 @@ def explain_with_shap_dependence_plots(model_shap_values, X, features, algorithm
 
 
 def explain_with_force_plots(model, model_shap_values, X, X_names, algorithm, model_explainer, version, families_mapping):
-    for fam in range(0, 10):
+    for fam in range(0, 55):
         for key, value in families_mapping.items():
             if value == fam:
                 family = key
         # Plot force plots using SHAP values (local explanations)
-        prepend_path = os.path.join("..", "..", "files", "results", "TreeClassifier", "multiclass", str(algorithm),
-                                    version, str(family) , "force-plots")
+        prepend_path = os.path.join("results", "TreeClassifier", "multiclass", str(algorithm), str(family) + "_" + version, "force-plots")
         command = "mkdir " + prepend_path
         subprocess.run(command, shell=True)
 
@@ -298,7 +316,7 @@ def explain_with_force_plots(model, model_shap_values, X, X_names, algorithm, mo
             prediction = predictions[sequence]
 
             fig = plt.clf()
-            shap.force_plot(model_explainer.expected_value[fam], model_shap_values[fam][sequence, :], X.loc[index],
+            shap.force_plot(model_explainer.expected_value, model_shap_values[fam][sequence, :], X.loc[index],
                             matplotlib=True, show=False)
             name_of_file = os.path.join(prepend_path,
                                         f"{family}-force-name-{name}-prediction-{prediction}-{algorithm}.png")
@@ -308,7 +326,7 @@ def explain_with_force_plots(model, model_shap_values, X, X_names, algorithm, mo
 
             sequence += 1
             # Plot only the first 100 or less if no more than 100 exist
-            if sequence == 50:
+            if sequence == 100:
                 break
 
     return None
@@ -418,96 +436,55 @@ if __name__ == "__main__":
             print(len(y_train))
             print(separator)
 
+        # with open("test_sample_500/test_sample_xai_500_all_years_v4", "wb") as file:
+        #     pickle.dump(test_sample, file)
+        #
+        # with open("test_sample_500/test_name_sample_xai_500_all_years_v4", "wb") as file:
+        #     pickle.dump(names_sample, file)
 
         if not DRIFT:
             versions = ["v1", "v2", "v3", "v4"]
-            # all_v1 = []
-            # all_v2 = []
-            # all_v3 = []
-            # all_v4 = []
-            #
-            ALL = {}
-            X = {}
-            y = {}
-            X_names = {}
+            test_sample = {}
+            names_sample = {}
 
-            # all = pd.concat([X_test, y_test], axis=1)
-            #
-            # for f in all["Family"].unique():
-            #     temp = all[all["Family"]==f].sample(n=300, random_state=1111)
-            #     all_v1.append(temp)
-            #
-            #     temp = all[all["Family"]==f].sample(n=300, random_state=2222)
-            #     all_v2.append(temp)
-            #
-            #     temp = all[all["Family"]==f].sample(n=300, random_state=3333)
-            #     all_v3.append(temp)
-            #
-            #     temp = all[all["Family"]==f].sample(n=300, random_state=4444)
-            #     all_v4.append(temp)
-            #
-            # ALL_v1 = pd.concat(all_v1)
-            # ALL["v1"] = ALL_v1
-            # ALL_v2 = pd.concat(all_v2)
-            # ALL["v2"] = ALL_v2
-            # ALL_v3 = pd.concat(all_v3)
-            # ALL["v3"] = ALL_v3
-            # ALL_v4 = pd.concat(all_v4)
-            # ALL["v4"] = ALL_v4
+            selected_families = ["all", "all_DGAs", "hash-based", "arithmetic-based", "wordlist-based"]
 
             for v in versions:
-                # X[v] = ALL[v].iloc[:, :-3]
-                # X_names[v] = ALL[v]["Name"]
-                # y[v] = ALL[v].iloc[:, -3:]
-                #
-                # with open(f"test_sample_300/all_{v}", "wb") as file:
-                #     pickle.dump(ALL[v], file)
-                #
-                # with open(f"test_sample_300/X_{v}", "wb") as file:
-                #     pickle.dump(X[v], file)
-                #
-                # with open(f"test_sample_300/X_names_{v}", "wb") as file:
-                #     pickle.dump(X_names[v], file)
+                with open(f"test_sample_500/test_sample_xai_500_all_years_{v}", "rb") as file:
+                    test_sample[v] = pickle.load(file)
 
-                with open(f"test_sample_300/X_{v}", "rb") as file:
-                    X[v] = pickle.load(file)
-
-                with open(f"test_sample_300/X_names_{v}", "rb") as file:
-                    X_names[v] = pickle.load(file)
-
-                with open(f"test_sample_300/all_{v}", "rb") as file:
-                    ALL[v] = pickle.load(file)
+                with open(f"test_sample_500/test_name_sample_xai_500_all_years_{v}", "rb") as file:
+                    names_sample[v] = pickle.load(file)
 
 
-                test_df = pd.DataFrame(X[v])
+                test_df = pd.DataFrame(test_sample[v]["all"])
                 is_included = test_df.isin(X_train).all().all()
                 print(separator)
-                print(ALL[v]['Family'].value_counts())
                 print("CKECK!!! (if the pickle is included in the training set)", is_included)
                 print(separator)
 
-                # if STAT:
-                #     for family in selected_families:
-                #         stat = reverse_scale_dataset(X[v][family], minimum, maximum)
-                #         # Create directory if it doesn't exist
-                #         prepend_path = os.path.join("..", "..", "files", "results", "multiclass", "stats", v, family)
-                #         command = "mkdir " + prepend_path
-                #         subprocess.run(command, shell=True)
-                #
-                #         for feature in features_red:
-                #             plt.figure(figsize=(8, 6))
-                #             plt.hist(stat[feature], bins=25, color='green', edgecolor='black')
-                #             plt.title('Histogram of ' + feature + ' for ' + family + ': ' + v)
-                #             plt.xlabel(feature)
-                #             plt.ylabel('Domain Names')
-                #             plt.grid(True)
-                #
-                #             # Save the plot
-                #             name = os.path.join(prepend_path, f"{family}_{feature}_{v}")
-                #             plt.savefig(name)
-                #
-                #             # Close the plot
-                #             plt.close()
+                if STAT:
+                    for family in selected_families:
+                        stat = reverse_scale_dataset(test_sample[v][family], minimum, maximum)
+                        # Create directory if it doesn't exist
+                        prepend_path = os.path.join("..", "..", "files", "results", "multiclass", "stats", v, family)
+                        command = "mkdir " + prepend_path
+                        subprocess.run(command, shell=True)
+
+                        for feature in features_red:
+                            plt.figure(figsize=(8, 6))
+                            plt.hist(stat[feature], bins=25, color='green', edgecolor='black')
+                            plt.title('Histogram of ' + feature + ' for ' + family + ': ' + v)
+                            plt.xlabel(feature)
+                            plt.ylabel('Domain Names')
+                            plt.grid(True)
+
+                            # Save the plot
+                            name = os.path.join(prepend_path, f"{family}_{feature}_{v}")
+                            plt.savefig(name)
+
+                            # Close the plot
+                            plt.close()
 
             # SHAP will run forever if you give the entire the training dataset. We use k-means to reduce the training dataset into specific centroids
             background = shap.kmeans(X_train, K_MEANS_CLUSTERS)
@@ -538,17 +515,28 @@ if __name__ == "__main__":
             selected_features = df[["Reputation", "Length", "Words_Mean", "Max_Let_Seq", "Words_Freq",
                                     "Vowel_Freq", "Entropy", "Max_DeciDig_Seq", "Freq_0"]]
 
+            X = X_test.sample(n=500, random_state=43)
+            model_shap_values = model_explainer.shap_values(X)
+            shap.summary_plot(model_shap_values[:10], X, plot_type="bar", class_names={0:"tranco", 1: "bamital",
+                                2: "banjori", 3: "matsnu", 4: "dyre", 5: "conficker", 6: "cryptolocker", 7: "suppobox",
+                                8: "nymaim", 9: "pykspa"}, feature_names=features_red)
+            shap.summary_plot(model_shap_values[2], X, plot_type="dot", feature_names=features_red)
 
-            for v in versions:
-                print("Calculating SHAP values for version: ", v)
 
-                model_shap_values = model_explainer.shap_values(X[v])
+            # explain_with_shap_summary_plots(model_shap_values, "total", X, algorithm, "v")
+            # explain_with_shap_summary_plots(model_shap_values[0], "0", X, algorithm, "v")
 
-                explain_with_shap_summary_plots(model_shap_values, X[v], algorithm, v, families_mapping)
-                explain_with_shap_dependence_plots(model_shap_values, X[v], features_red, algorithm,
-                                                    v, families_mapping)
-                explain_with_force_plots(model, model_shap_values, X[v], X_names[v], algorithm,
-                                            model_explainer, v, families_mapping)
+            # for v in [1111, 2222, 3333, 44444]:
+            #     print("Calculating SHAP values for version: ", v)
+            #
+            #     X = X_test.sample(n=1000, random_state=v)
+            #     model_shap_values = model_explainer.shap_values(X)
+
+                # explain_with_shap_summary_plots(model_shap_values,  X , algorithm, v, families_mapping)
+                # explain_with_shap_dependence_plots(model_shap_values, family, test_sample[v][family],
+                #                                    selected_features, algorithm, v)
+                # explain_with_force_plots(model, model_shap_values, family, test_sample[v][family],
+                #                          names_sample[v][family], algorithm, model_explainer, v)
 
 
 
