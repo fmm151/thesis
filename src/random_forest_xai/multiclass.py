@@ -138,7 +138,7 @@ def oversample_data(X_train, y_train):
 
 
 def train_model(X_train, y_train):
-    model = RandomForestClassifier(n_estimators=10, max_depth=10, n_jobs=-1, random_state=RNG)
+    model = RandomForestClassifier(n_estimators=100, max_depth=100, n_jobs=-1, random_state=RNG)
     model.fit(X_train, y_train.values.ravel())
 
     return model
